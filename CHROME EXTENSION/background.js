@@ -67,8 +67,5 @@ chrome.runtime.onMessage.addListener((msg) => {
     notifyPi("active", true);
   }
 
-
-  }
-
   // State updates can be handled here if needed
 });
