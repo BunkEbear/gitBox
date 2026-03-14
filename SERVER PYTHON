@@ -1,0 +1,128 @@
+import RPi.GPIO as GPIO
+import board
+import neopixel
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from datetime import datetime
+from time import sleep, time
+from threading import Thread, Event, Lock
+
+# --------------------
+# NeoPixel setup
+# --------------------
+PIXEL_PIN = board.D18
+NUM_PIXELS = 10
+BRIGHTNESS = 0.5
+
+pixels = neopixel.NeoPixel(
+    PIXEL_PIN,
+    NUM_PIXELS,
+    brightness=BRIGHTNESS,
+    auto_write=True,
+    pixel_order=neopixel.GRB
+)
+
+pixels.fill((0, 0, 0))  # start off
+
+# --------------------
+# GPIO setup
+# --------------------
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO_PIN = 16
+GPIO.setup(GPIO_PIN, GPIO.OUT)
+GPIO.output(GPIO_PIN, GPIO.LOW)
+
+# --------------------
+# Flashing setup
+# --------------------
+flash_thread = None
+stop_flash_event = Event()
+thread_lock = Lock()
+
+def flash_red():
+    while not stop_flash_event.is_set():
+        pixels.fill((255, 0, 0))
+        GPIO.output(GPIO_PIN, GPIO.HIGH)
+        sleep(0.5)
+        pixels.fill((0, 0, 0))
+        GPIO.output(GPIO_PIN, GPIO.LOW)
+        sleep(0.5)
+    pixels.fill((0, 0, 0))
+    GPIO.output(GPIO_PIN, GPIO.LOW)
+
+# --------------------
+# Watchdog timer
+# --------------------
+last_activity = time()
+WATCHDOG_TIMEOUT = 5  # seconds
+
+def watchdog_loop():
+    global flash_thread, stop_flash_event
+    while True:
+        sleep(1)
+        if time() - last_activity > WATCHDOG_TIMEOUT:
+            # Stop flashing if no requests received recently
+            with thread_lock:
+                stop_flash_event.set()
+                if flash_thread is not None:
+                    flash_thread.join()
+                    flash_thread = None
+
+watchdog = Thread(target=watchdog_loop, daemon=True)
+watchdog.start()
+
+# --------------------
+# Flask server
+# --------------------
+app = Flask(__name__)
+CORS(app)
+
+@app.route("/activity", methods=["POST"])
+def activity():
+    global flash_thread, stop_flash_event, last_activity
+
+    last_activity = time()
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    if data.get("test"):
+        print(f"[{timestamp}] button pushed")
+
+    if status == "inactive":
+        print(f"[{timestamp}] No Activity Detected")
+        with thread_lock:
+            if flash_thread is None or not flash_thread.is_alive():
+                stop_flash_event.clear()
+                flash_thread = Thread(target=flash_red)
+                flash_thread.start()
+
+    elif status == "active":
+        print(f"[{timestamp}] Activity Detected")
+        with thread_lock:
+            stop_flash_event.set()
+            if flash_thread is not None:
+                flash_thread.join()
+                flash_thread = None
+        pixels.fill((0, 0, 0))
+        GPIO.output(GPIO_PIN, GPIO.LOW)
+
+    else:
+        print(f"[{timestamp}] UNKNOWN MESSAGE: {data}")
+
+    return jsonify({"ok": True})
+
+# --------------------
+# Run server
+# --------------------
+if __name__ == "__main__":
+    try:
+        app.run(host="0.0.0.0", port=25565)
+    finally:
+        stop_flash_event.set()
+        if flash_thread is not None:
+            flash_thread.join()
+        pixels.fill((0, 0, 0))
+        GPIO.output(GPIO_PIN, GPIO.LOW)
+        GPIO.cleanup()

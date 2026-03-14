@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Freeze Detector</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 400px;
+      margin: auto;
+    }
+
+    h2 { text-align: center; margin-bottom: 15px; }
+
+    select, button { width: 100%; margin-top: 10px; padding: 10px; font-size: 1em; }
+
+    #status { margin-top: 20px; font-weight: bold; text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>Freeze Detector</h2>
+  <button id="refreshTabs">Refresh Tabs</button>
+  <select id="tabSelect"></select>
+  <button id="startBtn">Start Monitoring</button>
+  <button id="stopBtn">Stop Monitoring</button>
+  <div id="status">Monitoring not started.</div>
+  <script src="monitor.js"></script>
+</body>
+</html>

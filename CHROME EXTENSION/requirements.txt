@@ -1,0 +1,1 @@
+flask\nflask-cors\npytest==7.4.2\n
